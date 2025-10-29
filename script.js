@@ -149,9 +149,9 @@ class DynamicMetronome {
             const dy = lastY - touch.clientY;
             lastY = touch.clientY;
             
-            // Adjusted sensitivities: beats/bar decreased by 20%, bars/tempo, start/end BPM increased by 10%
-            const sensitivity = canvasId === 'beatsKnob' ? 0.24 : 
-                              canvasId === 'incrementKnob' ? 0.5 : 0.22;
+            // Adjusted sensitivities: beats/bar = 0.1, bars/tempo, start/end BPM = 0.3
+            const sensitivity = canvasId === 'beatsKnob' ? 0.1 : 
+                              canvasId === 'incrementKnob' ? 0.5 : 0.3;
             const change = dy * sensitivity;
             
             value = Math.max(min, Math.min(max, value + change));
@@ -386,6 +386,7 @@ class DynamicMetronome {
         
         // Add click handler to value display
         valueDisplay.style.cursor = 'pointer';
+        valueDisplay.style.pointerEvents = 'auto'; // Override CSS pointer-events: none
         valueDisplay.addEventListener('click', (e) => {
             e.stopPropagation();
             showNumpad();
