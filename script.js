@@ -149,8 +149,9 @@ class DynamicMetronome {
             const dy = lastY - touch.clientY;
             lastY = touch.clientY;
             
-            const sensitivity = canvasId === 'beatsKnob' ? 0.3 : 
-                              canvasId === 'incrementKnob' ? 0.5 : 0.2;
+            // Adjusted sensitivities: beats/bar decreased by 20%, bars/tempo, start/end BPM increased by 10%
+            const sensitivity = canvasId === 'beatsKnob' ? 0.24 : 
+                              canvasId === 'incrementKnob' ? 0.5 : 0.22;
             const change = dy * sensitivity;
             
             value = Math.max(min, Math.min(max, value + change));
@@ -172,6 +173,228 @@ class DynamicMetronome {
         document.addEventListener('touchmove', handleMove, { passive: false });
         document.addEventListener('mouseup', handleEnd);
         document.addEventListener('touchend', handleEnd);
+        
+        // Numpad functionality for direct value entry
+        const showNumpad = () => {
+            // Remove any existing numpad
+            const existingNumpad = document.getElementById('numpad-modal');
+            if (existingNumpad) {
+                existingNumpad.remove();
+            }
+            
+            // Create numpad modal
+            const modal = document.createElement('div');
+            modal.id = 'numpad-modal';
+            modal.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0, 0, 0, 0.8);
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                z-index: 1000;
+            `;
+            
+            const numpadContainer = document.createElement('div');
+            numpadContainer.style.cssText = `
+                background: #2C2C2C;
+                border: 3px solid #E8A317;
+                border-radius: 15px;
+                padding: 20px;
+                box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8);
+            `;
+            
+            // Current input display
+            let inputValue = '';
+            const inputDisplay = document.createElement('div');
+            inputDisplay.style.cssText = `
+                background: #1C1C1C;
+                color: #00FF00;
+                font-family: 'Courier New', monospace;
+                font-size: 32px;
+                font-weight: bold;
+                text-align: center;
+                padding: 15px;
+                margin-bottom: 15px;
+                border-radius: 8px;
+                min-height: 50px;
+                min-width: 200px;
+            `;
+            inputDisplay.textContent = value.toString();
+            numpadContainer.appendChild(inputDisplay);
+            
+            // Numpad grid
+            const numpadGrid = document.createElement('div');
+            numpadGrid.style.cssText = `
+                display: grid;
+                grid-template-columns: repeat(3, 1fr);
+                gap: 10px;
+                margin-bottom: 10px;
+            `;
+            
+            // Create number buttons 1-9
+            for (let i = 1; i <= 9; i++) {
+                const btn = createNumpadButton(i.toString());
+                btn.onclick = () => {
+                    if (inputValue === '' || inputValue === '0') {
+                        inputValue = i.toString();
+                    } else {
+                        inputValue += i.toString();
+                    }
+                    inputDisplay.textContent = inputValue;
+                };
+                numpadGrid.appendChild(btn);
+            }
+            
+            // Bottom row: Clear, 0, Backspace
+            const clearBtn = createNumpadButton('C');
+            clearBtn.onclick = () => {
+                inputValue = '';
+                inputDisplay.textContent = '0';
+            };
+            numpadGrid.appendChild(clearBtn);
+            
+            const zeroBtn = createNumpadButton('0');
+            zeroBtn.onclick = () => {
+                if (inputValue !== '') {
+                    inputValue += '0';
+                    inputDisplay.textContent = inputValue;
+                }
+            };
+            numpadGrid.appendChild(zeroBtn);
+            
+            const backBtn = createNumpadButton('←');
+            backBtn.onclick = () => {
+                if (inputValue.length > 0) {
+                    inputValue = inputValue.slice(0, -1);
+                    inputDisplay.textContent = inputValue || '0';
+                }
+            };
+            numpadGrid.appendChild(backBtn);
+            
+            numpadContainer.appendChild(numpadGrid);
+            
+            // Action buttons
+            const actionRow = document.createElement('div');
+            actionRow.style.cssText = `
+                display: flex;
+                gap: 10px;
+                margin-top: 10px;
+            `;
+            
+            const cancelBtn = createActionButton('Cancel');
+            cancelBtn.onclick = () => {
+                modal.remove();
+            };
+            actionRow.appendChild(cancelBtn);
+            
+            const okBtn = createActionButton('OK');
+            okBtn.onclick = () => {
+                const newValue = parseInt(inputValue || value.toString());
+                if (!isNaN(newValue) && newValue >= min && newValue <= max) {
+                    value = newValue;
+                    draw();
+                    if (onChange) onChange(value);
+                    modal.remove();
+                } else {
+                    alert(`Value must be between ${min} and ${max}`);
+                }
+            };
+            actionRow.appendChild(okBtn);
+            
+            numpadContainer.appendChild(actionRow);
+            modal.appendChild(numpadContainer);
+            document.body.appendChild(modal);
+            
+            // Close on background click
+            modal.onclick = (e) => {
+                if (e.target === modal) {
+                    modal.remove();
+                }
+            };
+        };
+        
+        function createNumpadButton(text) {
+            const btn = document.createElement('button');
+            btn.textContent = text;
+            btn.style.cssText = `
+                background: #CCCCCC;
+                border: 2px solid #999;
+                border-radius: 8px;
+                font-size: 24px;
+                font-weight: bold;
+                color: #4C4C4C;
+                padding: 15px;
+                cursor: pointer;
+                transition: all 0.1s;
+            `;
+            btn.onmousedown = () => {
+                btn.style.background = '#AAAAAA';
+                btn.style.transform = 'translateY(2px)';
+            };
+            btn.onmouseup = () => {
+                btn.style.background = '#CCCCCC';
+                btn.style.transform = 'translateY(0)';
+            };
+            btn.ontouchstart = () => {
+                btn.style.background = '#AAAAAA';
+                btn.style.transform = 'translateY(2px)';
+            };
+            btn.ontouchend = () => {
+                btn.style.background = '#CCCCCC';
+                btn.style.transform = 'translateY(0)';
+            };
+            return btn;
+        }
+        
+        function createActionButton(text) {
+            const btn = document.createElement('button');
+            btn.textContent = text;
+            btn.style.cssText = `
+                background: #E8A317;
+                border: 2px solid #B87A0F;
+                border-radius: 8px;
+                font-size: 18px;
+                font-weight: bold;
+                color: #1C1C1C;
+                padding: 12px 30px;
+                cursor: pointer;
+                flex: 1;
+                transition: all 0.1s;
+            `;
+            btn.onmousedown = () => {
+                btn.style.background = '#B87A0F';
+                btn.style.transform = 'translateY(2px)';
+            };
+            btn.onmouseup = () => {
+                btn.style.background = '#E8A317';
+                btn.style.transform = 'translateY(0)';
+            };
+            btn.ontouchstart = () => {
+                btn.style.background = '#B87A0F';
+                btn.style.transform = 'translateY(2px)';
+            };
+            btn.ontouchend = () => {
+                btn.style.background = '#E8A317';
+                btn.style.transform = 'translateY(0)';
+            };
+            return btn;
+        }
+        
+        // Add click handler to value display
+        valueDisplay.style.cursor = 'pointer';
+        valueDisplay.addEventListener('click', (e) => {
+            e.stopPropagation();
+            showNumpad();
+        });
+        valueDisplay.addEventListener('touchstart', (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            showNumpad();
+        }, { passive: false });
         
         draw();
         
