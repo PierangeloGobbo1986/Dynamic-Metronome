@@ -149,9 +149,9 @@ class DynamicMetronome {
             const dy = lastY - touch.clientY;
             lastY = touch.clientY;
             
-            // Adjusted sensitivities: beats/bar = 0.1, bars/tempo, start/end BPM = 0.3
-            const sensitivity = canvasId === 'beatsKnob' ? 0.1 : 
-                              canvasId === 'incrementKnob' ? 0.5 : 0.3;
+            // Adjusted sensitivities: beats/bar = 0.25 (easier to adjust), bars/tempo, start/end BPM = 0.7
+            const sensitivity = canvasId === 'beatsKnob' ? 0.25 : 
+                              canvasId === 'incrementKnob' ? 0.5 : 0.7;
             const change = dy * sensitivity;
             
             value = Math.max(min, Math.min(max, value + change));
@@ -350,15 +350,9 @@ class DynamicMetronome {
             btn.addEventListener('mouseup', releaseEffect);
             btn.addEventListener('mouseleave', releaseEffect);
             
-            btn.addEventListener('touchstart', (e) => {
-                e.preventDefault();
-                pressEffect();
-            }, { passive: false });
-            
-            btn.addEventListener('touchend', (e) => {
-                e.preventDefault();
-                releaseEffect();
-            }, { passive: false });
+            // Don't use preventDefault on touch events - it blocks the click!
+            btn.addEventListener('touchstart', pressEffect);
+            btn.addEventListener('touchend', releaseEffect);
             
             return btn;
         }
@@ -397,15 +391,9 @@ class DynamicMetronome {
             btn.addEventListener('mouseup', releaseEffect);
             btn.addEventListener('mouseleave', releaseEffect);
             
-            btn.addEventListener('touchstart', (e) => {
-                e.preventDefault();
-                pressEffect();
-            }, { passive: false });
-            
-            btn.addEventListener('touchend', (e) => {
-                e.preventDefault();
-                releaseEffect();
-            }, { passive: false });
+            // Don't use preventDefault on touch events - it blocks the click!
+            btn.addEventListener('touchstart', pressEffect);
+            btn.addEventListener('touchend', releaseEffect);
             
             return btn;
         }
