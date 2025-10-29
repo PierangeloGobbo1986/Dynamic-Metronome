@@ -150,7 +150,7 @@ class DynamicMetronome {
             lastY = touch.clientY;
             
             // Adjusted sensitivities: beats/bar = 0.1, bars/tempo, start/end BPM = 0.3
-            const sensitivity = canvasId === 'beatsKnob' ? 0.03 : 
+            const sensitivity = canvasId === 'beatsKnob' ? 0.05 : 
                               canvasId === 'incrementKnob' ? 0.5 : 0.7;
             const change = dy * sensitivity;
             
