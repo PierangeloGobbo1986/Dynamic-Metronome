@@ -488,9 +488,28 @@ class DynamicMetronome {
     
     initBeatCanvas() {
         const canvas = document.getElementById('beatCanvas');
-        canvas.addEventListener('click', (e) => this.handleBeatClick(e));
+        
+        // Add touch-action CSS for better mobile performance
+        canvas.style.touchAction = 'manipulation';
+        canvas.style.webkitTapHighlightColor = 'transparent';
+        
+        // Mouse click handler
+        canvas.addEventListener('click', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            const clickEvent = {
+                offsetX: (e.clientX - rect.left) * scaleX,
+                offsetY: (e.clientY - rect.top) * scaleY
+            };
+            this.handleBeatClick(clickEvent);
+        });
+        
+        // Touch handler - improved for better responsiveness
+        let touchHandled = false;
         canvas.addEventListener('touchstart', (e) => {
             e.preventDefault();
+            touchHandled = false;
             const touch = e.touches[0];
             const rect = canvas.getBoundingClientRect();
             const scaleX = canvas.width / rect.width;
@@ -500,6 +519,24 @@ class DynamicMetronome {
                 offsetY: (touch.clientY - rect.top) * scaleY
             };
             this.handleBeatClick(clickEvent);
+            touchHandled = true;
+        }, { passive: false });
+        
+        // Also handle touchend in case touchstart was missed
+        canvas.addEventListener('touchend', (e) => {
+            if (!touchHandled && e.changedTouches.length > 0) {
+                e.preventDefault();
+                const touch = e.changedTouches[0];
+                const rect = canvas.getBoundingClientRect();
+                const scaleX = canvas.width / rect.width;
+                const scaleY = canvas.height / rect.height;
+                const clickEvent = {
+                    offsetX: (touch.clientX - rect.left) * scaleX,
+                    offsetY: (touch.clientY - rect.top) * scaleY
+                };
+                this.handleBeatClick(clickEvent);
+            }
+            touchHandled = false;
         }, { passive: false });
     }
     
@@ -513,14 +550,31 @@ class DynamicMetronome {
             const dy = e.offsetY - 40;
             const distance = Math.sqrt(dx * dx + dy * dy);
             
-            if (distance <= 12) {
+            // Increased tap radius from 12 to 25 pixels for easier tapping
+            if (distance <= 25) {
                 const beatNum = i + 1;
                 if (this.accentBeats.has(beatNum)) {
                     this.accentBeats.delete(beatNum);
                 } else {
                     this.accentBeats.add(beatNum);
                 }
+                
+                // Add visual feedback - brief flash
                 this.updateBeatDisplay();
+                
+                // Flash the tapped beat
+                const canvas = document.getElementById('beatCanvas');
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = '#FFFFFF';
+                ctx.globalAlpha = 0.5;
+                ctx.beginPath();
+                ctx.arc(x, 40, 18, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.globalAlpha = 1.0;
+                
+                // Restore normal display after brief delay
+                setTimeout(() => this.updateBeatDisplay(), 100);
+                
                 break;
             }
         }
