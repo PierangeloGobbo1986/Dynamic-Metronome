@@ -644,9 +644,14 @@ class DynamicMetronome {
         }
     }
     
-    start() {
+    async start() {
         if (!this.audioContext) {
             this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        
+        // CRITICAL for iOS: Resume audio context if suspended
+        if (this.audioContext.state === 'suspended') {
+            await this.audioContext.resume();
         }
         
         const startBpm = this.knobs.startBpm;
