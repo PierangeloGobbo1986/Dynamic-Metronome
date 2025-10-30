@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<!--
+    Dynamic Metronome - Web Version
+    Copyright (c) 2025 Pierangelo Gobbo. All Rights Reserved.
+    
+    This software is proprietary and confidential.
+    Unauthorized copying, distribution, or modification is prohibited.
+-->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="mobile-web-app-capable" content="yes">
+    <style>
+        /* Touch optimization */
+        * {
+            touch-action: manipulation;
+            -webkit-touch-callout: none;
+        }
+    </style>
+    <title>Dynamic Metronome</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="app">
+        <div class="pedal-container">
+            <!-- Screws in corners -->
+            <div class="screw screw-tl"></div>
+            <div class="screw screw-tr"></div>
+            <div class="screw screw-bl"></div>
+            <div class="screw screw-br"></div>
+
+            <!-- Title -->
+            <h1 class="title">Dynamic Metronome</h1>
+
+            <!-- Mode Indicators -->
+            <div class="mode-indicators">
+                <div class="mode-item">
+                    <div class="led" id="normalLed"></div>
+                    <span>NORMAL</span>
+                </div>
+                <div class="mode-item">
+                    <div class="led" id="simpleLed"></div>
+                    <span>SIMPLE RAMP</span>
+                </div>
+                <div class="mode-item">
+                    <div class="led" id="complexLed"></div>
+                    <span>COMPLEX RAMP</span>
+                </div>
+            </div>
+
+            <!-- Knobs Row 1 -->
+            <div class="knobs-row">
+                <div class="knob-container">
+                    <canvas id="startBpmKnob" width="120" height="120"></canvas>
+                    <div class="knob-value" id="startBpmValue">120</div>
+                    <div class="knob-label">START BPM</div>
+                </div>
+                <div class="knob-container">
+                    <canvas id="endBpmKnob" width="120" height="120"></canvas>
+                    <div class="knob-value" id="endBpmValue">120</div>
+                    <div class="knob-label">END BPM</div>
+                </div>
+            </div>
+
+            <!-- Knobs Row 2 -->
+            <div class="knobs-row">
+                <div class="knob-container">
+                    <canvas id="incrementKnob" width="120" height="120"></canvas>
+                    <div class="knob-value" id="incrementValue">0</div>
+                    <div class="knob-label">BPM INCREMENT</div>
+                </div>
+                <div class="knob-container">
+                    <canvas id="barsKnob" width="120" height="120"></canvas>
+                    <div class="knob-value" id="barsValue">1</div>
+                    <div class="knob-label">BARS/TEMPO</div>
+                </div>
+                <div class="knob-container">
+                    <canvas id="beatsKnob" width="120" height="120"></canvas>
+                    <div class="knob-value" id="beatsValue">4</div>
+                    <div class="knob-label">BEATS/BAR</div>
+                </div>
+            </div>
+
+            <!-- Ready Display -->
+            <div class="ready-display" id="readyDisplay">Ready</div>
+
+            <!-- Beat Instruction -->
+            <div class="beat-instruction">(Tap beats to toggle accents)</div>
+
+            <!-- Beat Visualization -->
+            <div class="beat-canvas-container">
+                <canvas id="beatCanvas" width="400" height="80"></canvas>
+            </div>
+
+            <!-- Start/Stop Button -->
+            <button class="control-button" id="startStopButton">START</button>
+
+            <!-- Timer Display -->
+            <div class="timer-display" id="timerDisplay">00:00</div>
+
+            <!-- Segments Section -->
+            <div class="segments-label">Saved Tempo Segments:</div>
+            <div class="segments-display" id="segmentsDisplay"></div>
+
+            <!-- Segment Buttons -->
+            <div class="segment-buttons">
+                <button class="segment-button" id="saveButton">Save Segment</button>
+                <button class="segment-button" id="removeButton">Remove Last</button>
+                <button class="segment-button" id="clearButton">Clear All</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
