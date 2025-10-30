@@ -149,9 +149,9 @@ class DynamicMetronome {
             const dy = lastY - touch.clientY;
             lastY = touch.clientY;
             
-            // Adjusted sensitivities: beats/bar = 0.25 (easier to adjust), bars/tempo, start/end BPM = 0.7
-            const sensitivity = canvasId === 'beatsKnob' ? 0.25 : 
-                              canvasId === 'incrementKnob' ? 0.5 : 0.7;
+            // Adjusted sensitivities: beats/bar = 0.1, bars/tempo, start/end BPM = 0.3
+            const sensitivity = canvasId === 'beatsKnob' ? 0.1 : 
+                              canvasId === 'incrementKnob' ? 0.5 : 0.3;
             const change = dy * sensitivity;
             
             value = Math.max(min, Math.min(max, value + change));
@@ -330,30 +330,23 @@ class DynamicMetronome {
                 padding: 15px;
                 cursor: pointer;
                 transition: all 0.1s;
-                user-select: none;
-                -webkit-user-select: none;
-                -webkit-tap-highlight-color: transparent;
-                touch-action: manipulation;
             `;
-            
-            const pressEffect = () => {
+            btn.onmousedown = () => {
                 btn.style.background = '#AAAAAA';
                 btn.style.transform = 'translateY(2px)';
             };
-            
-            const releaseEffect = () => {
+            btn.onmouseup = () => {
                 btn.style.background = '#CCCCCC';
                 btn.style.transform = 'translateY(0)';
             };
-            
-            btn.addEventListener('mousedown', pressEffect);
-            btn.addEventListener('mouseup', releaseEffect);
-            btn.addEventListener('mouseleave', releaseEffect);
-            
-            // Don't use preventDefault on touch events - it blocks the click!
-            btn.addEventListener('touchstart', pressEffect);
-            btn.addEventListener('touchend', releaseEffect);
-            
+            btn.ontouchstart = () => {
+                btn.style.background = '#AAAAAA';
+                btn.style.transform = 'translateY(2px)';
+            };
+            btn.ontouchend = () => {
+                btn.style.background = '#CCCCCC';
+                btn.style.transform = 'translateY(0)';
+            };
             return btn;
         }
         
@@ -371,85 +364,37 @@ class DynamicMetronome {
                 cursor: pointer;
                 flex: 1;
                 transition: all 0.1s;
-                user-select: none;
-                -webkit-user-select: none;
-                -webkit-tap-highlight-color: transparent;
-                touch-action: manipulation;
             `;
-            
-            const pressEffect = () => {
+            btn.onmousedown = () => {
                 btn.style.background = '#B87A0F';
                 btn.style.transform = 'translateY(2px)';
             };
-            
-            const releaseEffect = () => {
+            btn.onmouseup = () => {
                 btn.style.background = '#E8A317';
                 btn.style.transform = 'translateY(0)';
             };
-            
-            btn.addEventListener('mousedown', pressEffect);
-            btn.addEventListener('mouseup', releaseEffect);
-            btn.addEventListener('mouseleave', releaseEffect);
-            
-            // Don't use preventDefault on touch events - it blocks the click!
-            btn.addEventListener('touchstart', pressEffect);
-            btn.addEventListener('touchend', releaseEffect);
-            
+            btn.ontouchstart = () => {
+                btn.style.background = '#B87A0F';
+                btn.style.transform = 'translateY(2px)';
+            };
+            btn.ontouchend = () => {
+                btn.style.background = '#E8A317';
+                btn.style.transform = 'translateY(0)';
+            };
             return btn;
         }
         
-        // Add click handler to value display - make it very tappable
+        // Add click handler to value display
         valueDisplay.style.cursor = 'pointer';
         valueDisplay.style.pointerEvents = 'auto'; // Override CSS pointer-events: none
-        valueDisplay.style.padding = '8px 16px'; // Increase tappable area
-        valueDisplay.style.margin = '-8px -16px'; // Compensate for padding to keep visual position
-        valueDisplay.style.minWidth = '40px'; // Ensure minimum tappable width
-        valueDisplay.style.minHeight = '20px'; // Ensure minimum tappable height
-        valueDisplay.style.borderRadius = '4px'; // Rounded corners
-        valueDisplay.style.transition = 'all 0.1s'; // Smooth feedback
-        valueDisplay.style.userSelect = 'none'; // Prevent text selection
-        valueDisplay.style.webkitUserSelect = 'none'; // Safari
-        valueDisplay.style.webkitTapHighlightColor = 'rgba(232, 163, 23, 0.3)'; // iOS tap highlight
-        
-        // Add visual feedback on hover/press
-        const showTapFeedback = () => {
-            valueDisplay.style.backgroundColor = 'rgba(232, 163, 23, 0.3)';
-            valueDisplay.style.transform = 'scale(1.1)';
-        };
-        
-        const hideTapFeedback = () => {
-            valueDisplay.style.backgroundColor = 'transparent';
-            valueDisplay.style.transform = 'scale(1)';
-        };
-        
-        // Mouse events
-        valueDisplay.addEventListener('mouseenter', () => {
-            valueDisplay.style.backgroundColor = 'rgba(232, 163, 23, 0.15)';
-        });
-        
-        valueDisplay.addEventListener('mouseleave', hideTapFeedback);
-        
-        valueDisplay.addEventListener('mousedown', (e) => {
-            showTapFeedback();
-        });
-        
-        valueDisplay.addEventListener('mouseup', hideTapFeedback);
-        
         valueDisplay.addEventListener('click', (e) => {
             e.stopPropagation();
-            e.preventDefault();
             showNumpad();
-            setTimeout(hideTapFeedback, 100);
         });
-        
-        // Touch events - more sensitive
         valueDisplay.addEventListener('touchstart', (e) => {
             e.stopPropagation();
             e.preventDefault();
-            showTapFeedback();
-            // Trigger numpad immediately on touch
             showNumpad();
-            setTimeout(hideTapFeedback, 150);
         }, { passive: false });
         
         draw();
@@ -513,16 +458,13 @@ class DynamicMetronome {
             const dy = e.offsetY - 40;
             const distance = Math.sqrt(dx * dx + dy * dy);
             
-            // Increased tap radius from 12 to 25 pixels for easier tapping
-            if (distance <= 25) {
+            if (distance <= 12) {
                 const beatNum = i + 1;
                 if (this.accentBeats.has(beatNum)) {
                     this.accentBeats.delete(beatNum);
                 } else {
                     this.accentBeats.add(beatNum);
                 }
-                
-                // Update display immediately
                 this.updateBeatDisplay();
                 break;
             }
@@ -607,14 +549,9 @@ class DynamicMetronome {
         }
     }
     
-    async start() {
+    start() {
         if (!this.audioContext) {
             this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        }
-        
-        // Resume audio context for iOS (minimal fix)
-        if (this.audioContext.state === 'suspended') {
-            await this.audioContext.resume();
         }
         
         const startBpm = this.knobs.startBpm;
