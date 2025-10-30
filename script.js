@@ -1,12 +1,12 @@
 /**
  * Dynamic Metronome - Web Version
- * Copyright (c) 2025 [Your Name]. All Rights Reserved.
+ * Copyright (c) 2025 Pierangelo Gobbo. All Rights Reserved.
  * 
  * This software is proprietary and confidential.
  * Unauthorized copying, distribution, or modification of this software,
  * via any medium, is strictly prohibited without explicit permission.
  * 
- * For licensing inquiries, contact: [your.email@example.com]
+ * For licensing inquiries, contact: pierangelogobbo@yahoo.it
  */
 
 // ==================================
