@@ -654,6 +654,16 @@ class DynamicMetronome {
             await this.audioContext.resume();
         }
         
+        // Give iOS audio context a moment to fully initialize
+        await this.sleep(50);
+        
+        // Verify audio context is actually running
+        if (this.audioContext.state !== 'running') {
+            console.error('Audio context failed to start. State:', this.audioContext.state);
+            alert('Audio failed to initialize. Please try again.');
+            return;
+        }
+        
         const startBpm = this.knobs.startBpm;
         const endBpm = this.knobs.endBpm;
         const increment = this.knobs.increment;
@@ -710,6 +720,14 @@ class DynamicMetronome {
     }
     
     async runMetronome() {
+        // Ensure audio context is running before starting timing
+        if (!this.audioContext || this.audioContext.state !== 'running') {
+            console.error('Audio context not running, cannot start metronome');
+            this.stop();
+            alert('Audio initialization failed. Please try starting again.');
+            return;
+        }
+        
         const startBpm = this.knobs.startBpm;
         const endBpm = this.knobs.endBpm;
         const beatsPerBar = this.knobs.beats;
@@ -744,6 +762,8 @@ class DynamicMetronome {
             }
         }
         
+        // Use Date.now() for timing instead of audioContext.currentTime for iOS compatibility
+        let nextBeatTimeMs = Date.now();
         this.nextBeatTime = this.audioContext.currentTime;
         let globalBeatCount = 0;
         let lastBpmUpdate = 0;
@@ -752,7 +772,7 @@ class DynamicMetronome {
         if (!normalMode) {
             const countdownBpm = segments[0].start;
             const countdownBeats = segments[0].beats;
-            const beatInterval = 60.0 / countdownBpm;
+            const beatIntervalMs = (60.0 / countdownBpm) * 1000; // Convert to milliseconds
             
             lastBpmUpdate = 0;
             
@@ -760,6 +780,7 @@ class DynamicMetronome {
             document.getElementById('readyDisplay').textContent = 'GET READY!';
             await this.sleep(1000);
             
+            nextBeatTimeMs = Date.now();
             this.nextBeatTime = this.audioContext.currentTime;
             
             // Countdown bar
@@ -769,8 +790,8 @@ class DynamicMetronome {
                 const beatInBar = beatNum + 1;
                 const countdownNumber = -(countdownBeats - beatNum);
                 
-                // Wait for beat
-                while (this.audioContext.currentTime < this.nextBeatTime) {
+                // Wait for beat using Date.now() for iOS compatibility
+                while (Date.now() < nextBeatTimeMs) {
                     await this.sleep(1);
                 }
                 
@@ -781,7 +802,8 @@ class DynamicMetronome {
                 document.getElementById('readyDisplay').textContent = countdownNumber;
                 this.updateBeatDisplay(beatNum);
                 
-                this.nextBeatTime += beatInterval;
+                nextBeatTimeMs += beatIntervalMs;
+                this.nextBeatTime += (60.0 / countdownBpm);
             }
         }
         
@@ -864,6 +886,7 @@ class DynamicMetronome {
                 }
                 
                 const beatInterval = 60.0 / tempo;
+                const beatIntervalMs = beatInterval * 1000; // Convert to milliseconds
                 const totalBeats = normalMode ? beatsPerBarSeg : (barsPerTempo * beatsPerBarSeg);
                 
                 // Play beats
@@ -881,8 +904,8 @@ class DynamicMetronome {
                     
                     const beatInBar = (beatNum % beatsPerBarSeg) + 1;
                     
-                    // Wait for beat time
-                    while (this.audioContext.currentTime < this.nextBeatTime) {
+                    // Wait for beat time using Date.now() for iOS compatibility
+                    while (Date.now() < nextBeatTimeMs) {
                         await this.sleep(1);
                     }
                     
@@ -898,6 +921,9 @@ class DynamicMetronome {
                     // Update beat display
                     this.updateBeatDisplay(beatInBar - 1);
                     
+                    // Update timing for next beat
+                    const currentBeatIntervalMs = (60.0 / tempo) * 1000;
+                    nextBeatTimeMs += currentBeatIntervalMs;
                     this.nextBeatTime += 60.0 / tempo;
                     globalBeatCount++;
                 }
