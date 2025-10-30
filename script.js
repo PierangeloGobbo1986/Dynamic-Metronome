@@ -559,22 +559,8 @@ class DynamicMetronome {
                     this.accentBeats.add(beatNum);
                 }
                 
-                // Add visual feedback - brief flash
+                // Update display immediately
                 this.updateBeatDisplay();
-                
-                // Flash the tapped beat
-                const canvas = document.getElementById('beatCanvas');
-                const ctx = canvas.getContext('2d');
-                ctx.fillStyle = '#FFFFFF';
-                ctx.globalAlpha = 0.5;
-                ctx.beginPath();
-                ctx.arc(x, 40, 18, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.globalAlpha = 1.0;
-                
-                // Restore normal display after brief delay
-                setTimeout(() => this.updateBeatDisplay(), 100);
-                
                 break;
             }
         }
