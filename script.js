@@ -571,7 +571,7 @@ class DynamicMetronome {
             bars: this.createKnob('barsKnob', 'barsValue', 1, 100, 1, (v) => {
                 this.knobs.bars = v;
             }),
-            startBpm: this.createKnob('startBpmKnob', 'startBpmValue', 40, 400, 120, (v) => {
+            startBpm: this.createKnob('startBpmKnob', 'startBpmValue', 1, 400, 120, (v) => {
                 this.knobs.startBpm = v;
                 this.knobControls.endBpm.setValue(v);
                 this.knobs.endBpm = v;
@@ -579,7 +579,7 @@ class DynamicMetronome {
                 this.currentTempo = v;
                 this.updateModeIndicators();
             }),
-            endBpm: this.createKnob('endBpmKnob', 'endBpmValue', 40, 400, 120, (v) => {
+            endBpm: this.createKnob('endBpmKnob', 'endBpmValue', 1, 400, 120, (v) => {
                 this.knobs.endBpm = v;
                 this.endBpmManuallyChanged = true;
                 this.updateModeIndicators();
