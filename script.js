@@ -1,1149 +1,857 @@
-/**
- * Dynamic Metronome - Web Version
- * Copyright (c) 2025 Pierangelo Gobbo. All Rights Reserved.
- * 
- * This software is proprietary and confidential.
- * Unauthorized copying, distribution, or modification of this software,
- * via any medium, is strictly prohibited without explicit permission.
- * 
- * For licensing inquiries, contact: pierangelogobbo@yahoo.it
- */
+#!/usr/bin/env python3
+"""
+TempoRamp - Progressive Tempo Metronome
+Redesigned with Normal/Ramp modes and inline segment management
+"""
 
-// ==================================
-//
-// SOUND STYLES:
-// To change the metronome sound, find line ~18 and set this.soundStyle to one of:
-// - 'classic' (default) - smooth sine wave tones
-// - 'woodblock' - percussive wood block sound
-// - 'click' - sharp click sound
-// - 'beep' - electronic beep
-//
-// Or modify the playClick functions to create your own custom sounds!
-//
-// BEAT STATES:
-// Tap a beat dot to cycle through: Normal → Accent → Muted → Normal
-// - Normal: light grey, plays regular sound
-// - Accent: gold outline, plays higher pitch
-// - Muted: dark grey, silent
+import tkinter as tk
+from tkinter import ttk, messagebox, simpledialog
+import pygame
+import time
+import numpy as np
+import threading
+from PIL import Image, ImageDraw, ImageFont, ImageTk
+import math
 
-class DynamicMetronome {
-    constructor() {
-        // Audio context
-        this.audioContext = null;
-        this.accentFreq = 1000;
-        this.normalFreq = 800;
-        
-        // State
-        this.isRunning = false;
-        this.currentTempo = 120;
-        this.currentBeatsPerBar = null;
-        this.currentSegmentIndex = -1;
-        this.beatStates = new Map([[1, 'accent']]); // 'normal', 'accent', or 'muted'
-        this.tempoSegments = [];
-        this.endBpmManuallyChanged = false;
-        
-        // Timing
-        this.nextBeatTime = 0;
-        this.timerInterval = null;
-        this.sessionStartTime = 0;
-        this.totalTime = 0;
-        
-        // Knob values
-        this.knobs = {
-            beats: 4,
-            bars: 1,
-            startBpm: 120,
-            endBpm: 120,
-            increment: 0
-        };
-        
-        // Initialize
-        this.initAudio();
-        this.initKnobs();
-        this.initBeatCanvas();
-        this.initButtons();
-        this.updateModeIndicators();
-        this.updateBeatDisplay();
-    }
-    
-    initAudio() {
-        // Create audio context on first user interaction
-        document.addEventListener('touchstart', () => {
-            if (!this.audioContext) {
-                this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            }
-        }, { once: true });
-        
-        document.addEventListener('click', () => {
-            if (!this.audioContext) {
-                this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            }
-        }, { once: true });
-    }
-    
-    playClick(beatState) {
-        if (!this.audioContext || beatState === 'muted') return;
-        
-        // Sound style options - you can change this.soundStyle to try different sounds:
-        // 'classic' - simple sine waves (current)
-        // 'woodblock' - percussive wood block sound
-        // 'click' - sharp click sound
-        // 'beep' - electronic beep
-        this.soundStyle = this.soundStyle || 'classic';
-        
-        if (this.soundStyle === 'classic') {
-            this.playClassicClick(beatState === 'accent');
-        } else if (this.soundStyle === 'woodblock') {
-            this.playWoodblock(beatState === 'accent');
-        } else if (this.soundStyle === 'click') {
-            this.playSharpClick(beatState === 'accent');
-        } else if (this.soundStyle === 'beep') {
-            this.playBeep(beatState === 'accent');
-        }
-    }
-    
-    playClassicClick(isAccent) {
-        const osc = this.audioContext.createOscillator();
-        const gainNode = this.audioContext.createGain();
-        
-        osc.connect(gainNode);
-        gainNode.connect(this.audioContext.destination);
-        
-        osc.frequency.value = isAccent ? 1000 : 800;
-        osc.type = 'sine';
-        
-        const now = this.audioContext.currentTime;
-        gainNode.gain.setValueAtTime(0.3, now);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.05);
-        
-        osc.start(now);
-        osc.stop(now + 0.05);
-    }
-    
-    playWoodblock(isAccent) {
-        // Simulate wood block with multiple frequencies
-        const freqs = isAccent ? [800, 1200, 1600] : [600, 900, 1200];
-        const now = this.audioContext.currentTime;
-        
-        freqs.forEach((freq, i) => {
-            const osc = this.audioContext.createOscillator();
-            const gainNode = this.audioContext.createGain();
-            
-            osc.connect(gainNode);
-            gainNode.connect(this.audioContext.destination);
-            
-            osc.frequency.value = freq;
-            osc.type = 'square';
-            
-            const volume = isAccent ? 0.15 : 0.1;
-            gainNode.gain.setValueAtTime(volume / (i + 1), now);
-            gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.03);
-            
-            osc.start(now);
-            osc.stop(now + 0.03);
-        });
-    }
-    
-    playSharpClick(isAccent) {
-        const osc = this.audioContext.createOscillator();
-        const gainNode = this.audioContext.createGain();
-        
-        osc.connect(gainNode);
-        gainNode.connect(this.audioContext.destination);
-        
-        osc.frequency.value = isAccent ? 2000 : 1500;
-        osc.type = 'square';
-        
-        const now = this.audioContext.currentTime;
-        gainNode.gain.setValueAtTime(0.2, now);
-        gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.01);
-        
-        osc.start(now);
-        osc.stop(now + 0.01);
-    }
-    
-    playBeep(isAccent) {
-        const osc = this.audioContext.createOscillator();
-        const gainNode = this.audioContext.createGain();
-        
-        osc.connect(gainNode);
-        gainNode.connect(this.audioContext.destination);
-        
-        osc.frequency.value = isAccent ? 1200 : 880;
-        osc.type = 'triangle';
-        
-        const now = this.audioContext.currentTime;
-        const duration = isAccent ? 0.08 : 0.06;
-        gainNode.gain.setValueAtTime(0.25, now);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, now + duration);
-        
-        osc.start(now);
-        osc.stop(now + duration);
-    }
-    
-    // Knob Class
-    createKnob(canvasId, valueId, min, max, initial, onChange) {
-        const canvas = document.getElementById(canvasId);
-        const ctx = canvas.getContext('2d');
-        const valueDisplay = document.getElementById(valueId);
-        
-        let value = initial;
-        let isDragging = false;
-        let lastY = 0;
-        
-        const draw = () => {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            // Shadow
-            ctx.fillStyle = '#1C1C1C';
-            ctx.beginPath();
-            ctx.arc(60, 60, 55, 0, Math.PI * 2);
-            ctx.fill();
-            
-            // Main body
-            ctx.fillStyle = '#2C2C2C';
-            ctx.strokeStyle = '#1C1C1C';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.arc(60, 60, 52, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.stroke();
-            
-            // Inner circle
-            ctx.fillStyle = '#8C8C8C';
-            ctx.strokeStyle = '#6C6C6C';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.arc(60, 60, 36, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.stroke();
-            
-            // Pointer
-            const normalized = (value - min) / (max - min);
-            const angle = -135 + normalized * 270;
-            const rad = angle * Math.PI / 180;
-            
-            const startR = 18;
-            const endR = 44;
-            const x1 = 60 + startR * Math.sin(rad);
-            const y1 = 60 - startR * Math.cos(rad);
-            const x2 = 60 + endR * Math.sin(rad);
-            const y2 = 60 - endR * Math.cos(rad);
-            
-            ctx.strokeStyle = '#FFFFFF';
-            ctx.lineWidth = 3;
-            ctx.beginPath();
-            ctx.moveTo(x1, y1);
-            ctx.lineTo(x2, y2);
-            ctx.stroke();
-            
-            valueDisplay.textContent = Math.round(value);
-        };
-        
-        const handleStart = (e) => {
-            isDragging = true;
-            const touch = e.touches ? e.touches[0] : e;
-            lastY = touch.clientY;
-            e.preventDefault();
-        };
-        
-        const handleMove = (e) => {
-            if (!isDragging) return;
-            
-            const touch = e.touches ? e.touches[0] : e;
-            const dy = lastY - touch.clientY;
-            lastY = touch.clientY;
-            
-            // Adjusted sensitivities: beats/bar = 0.25 (easier to adjust), bars/tempo, start/end BPM = 0.7
-            const sensitivity = canvasId === 'beatsKnob' ? 0.25 : 
-                              canvasId === 'incrementKnob' ? 0.5 : 0.7;
-            const change = dy * sensitivity;
-            
-            value = Math.max(min, Math.min(max, value + change));
-            value = Math.round(value);
-            
-            draw();
-            if (onChange) onChange(value);
-            
-            e.preventDefault();
-        };
-        
-        const handleEnd = () => {
-            isDragging = false;
-        };
-        
-        canvas.addEventListener('mousedown', handleStart);
-        canvas.addEventListener('touchstart', handleStart, { passive: false });
-        document.addEventListener('mousemove', handleMove);
-        document.addEventListener('touchmove', handleMove, { passive: false });
-        document.addEventListener('mouseup', handleEnd);
-        document.addEventListener('touchend', handleEnd);
-        
-        // Numpad functionality for direct value entry
-        const showNumpad = () => {
-            // Remove any existing numpad
-            const existingNumpad = document.getElementById('numpad-modal');
-            if (existingNumpad) {
-                existingNumpad.remove();
-            }
-            
-            // Create numpad modal
-            const modal = document.createElement('div');
-            modal.id = 'numpad-modal';
-            modal.style.cssText = `
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                background: rgba(0, 0, 0, 0.8);
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                z-index: 1000;
-            `;
-            
-            const numpadContainer = document.createElement('div');
-            numpadContainer.style.cssText = `
-                background: #2C2C2C;
-                border: 3px solid #E8A317;
-                border-radius: 15px;
-                padding: 20px;
-                box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8);
-            `;
-            
-            // Current input display
-            let inputValue = '';
-            const inputDisplay = document.createElement('div');
-            inputDisplay.style.cssText = `
-                background: #1C1C1C;
-                color: #00FF00;
-                font-family: 'Courier New', monospace;
-                font-size: 32px;
-                font-weight: bold;
-                text-align: center;
-                padding: 15px;
-                margin-bottom: 15px;
-                border-radius: 8px;
-                min-height: 50px;
-                min-width: 200px;
-            `;
-            inputDisplay.textContent = value.toString();
-            numpadContainer.appendChild(inputDisplay);
-            
-            // Numpad grid
-            const numpadGrid = document.createElement('div');
-            numpadGrid.style.cssText = `
-                display: grid;
-                grid-template-columns: repeat(3, 1fr);
-                gap: 10px;
-                margin-bottom: 10px;
-            `;
-            
-            // Create number buttons 1-9
-            for (let i = 1; i <= 9; i++) {
-                const btn = createNumpadButton(i.toString());
-                btn.onclick = () => {
-                    if (inputValue === '' || inputValue === '0') {
-                        inputValue = i.toString();
-                    } else {
-                        inputValue += i.toString();
-                    }
-                    inputDisplay.textContent = inputValue;
-                };
-                numpadGrid.appendChild(btn);
-            }
-            
-            // Bottom row: Clear, 0, Backspace
-            const clearBtn = createNumpadButton('C');
-            clearBtn.onclick = () => {
-                inputValue = '';
-                inputDisplay.textContent = '0';
-            };
-            numpadGrid.appendChild(clearBtn);
-            
-            const zeroBtn = createNumpadButton('0');
-            zeroBtn.onclick = () => {
-                if (inputValue !== '') {
-                    inputValue += '0';
-                    inputDisplay.textContent = inputValue;
-                }
-            };
-            numpadGrid.appendChild(zeroBtn);
-            
-            const backBtn = createNumpadButton('←');
-            backBtn.onclick = () => {
-                if (inputValue.length > 0) {
-                    inputValue = inputValue.slice(0, -1);
-                    inputDisplay.textContent = inputValue || '0';
-                }
-            };
-            numpadGrid.appendChild(backBtn);
-            
-            numpadContainer.appendChild(numpadGrid);
-            
-            // Action buttons
-            const actionRow = document.createElement('div');
-            actionRow.style.cssText = `
-                display: flex;
-                gap: 10px;
-                margin-top: 10px;
-            `;
-            
-            const cancelBtn = createActionButton('Cancel');
-            cancelBtn.onclick = () => {
-                modal.remove();
-            };
-            actionRow.appendChild(cancelBtn);
-            
-            const okBtn = createActionButton('OK');
-            okBtn.onclick = () => {
-                const newValue = parseInt(inputValue || value.toString());
-                if (!isNaN(newValue) && newValue >= min && newValue <= max) {
-                    value = newValue;
-                    draw();
-                    if (onChange) onChange(value);
-                    modal.remove();
-                } else {
-                    alert(`Value must be between ${min} and ${max}`);
-                }
-            };
-            actionRow.appendChild(okBtn);
-            
-            numpadContainer.appendChild(actionRow);
-            modal.appendChild(numpadContainer);
-            document.body.appendChild(modal);
-            
-            // Close on background click
-            modal.onclick = (e) => {
-                if (e.target === modal) {
-                    modal.remove();
-                }
-            };
-        };
-        
-        function createNumpadButton(text) {
-            const btn = document.createElement('button');
-            btn.textContent = text;
-            btn.style.cssText = `
-                background: #CCCCCC;
-                border: 2px solid #999;
-                border-radius: 8px;
-                font-size: 24px;
-                font-weight: bold;
-                color: #4C4C4C;
-                padding: 15px;
-                cursor: pointer;
-                transition: all 0.1s;
-                user-select: none;
-                -webkit-user-select: none;
-                -webkit-tap-highlight-color: transparent;
-                touch-action: manipulation;
-            `;
-            
-            const pressEffect = () => {
-                btn.style.background = '#AAAAAA';
-                btn.style.transform = 'translateY(2px)';
-            };
-            
-            const releaseEffect = () => {
-                btn.style.background = '#CCCCCC';
-                btn.style.transform = 'translateY(0)';
-            };
-            
-            btn.addEventListener('mousedown', pressEffect);
-            btn.addEventListener('mouseup', releaseEffect);
-            btn.addEventListener('mouseleave', releaseEffect);
-            
-            // Don't use preventDefault on touch events - it blocks the click!
-            btn.addEventListener('touchstart', pressEffect);
-            btn.addEventListener('touchend', releaseEffect);
-            
-            return btn;
-        }
-        
-        function createActionButton(text) {
-            const btn = document.createElement('button');
-            btn.textContent = text;
-            btn.style.cssText = `
-                background: #E8A317;
-                border: 2px solid #B87A0F;
-                border-radius: 8px;
-                font-size: 18px;
-                font-weight: bold;
-                color: #1C1C1C;
-                padding: 12px 30px;
-                cursor: pointer;
-                flex: 1;
-                transition: all 0.1s;
-                user-select: none;
-                -webkit-user-select: none;
-                -webkit-tap-highlight-color: transparent;
-                touch-action: manipulation;
-            `;
-            
-            const pressEffect = () => {
-                btn.style.background = '#B87A0F';
-                btn.style.transform = 'translateY(2px)';
-            };
-            
-            const releaseEffect = () => {
-                btn.style.background = '#E8A317';
-                btn.style.transform = 'translateY(0)';
-            };
-            
-            btn.addEventListener('mousedown', pressEffect);
-            btn.addEventListener('mouseup', releaseEffect);
-            btn.addEventListener('mouseleave', releaseEffect);
-            
-            // Don't use preventDefault on touch events - it blocks the click!
-            btn.addEventListener('touchstart', pressEffect);
-            btn.addEventListener('touchend', releaseEffect);
-            
-            return btn;
-        }
-        
-        // Add click handler to value display - make it very tappable
-        valueDisplay.style.cursor = 'pointer';
-        valueDisplay.style.pointerEvents = 'auto'; // Override CSS pointer-events: none
-        valueDisplay.style.padding = '8px 16px'; // Increase tappable area
-        valueDisplay.style.margin = '-8px -16px'; // Compensate for padding to keep visual position
-        valueDisplay.style.minWidth = '40px'; // Ensure minimum tappable width
-        valueDisplay.style.minHeight = '20px'; // Ensure minimum tappable height
-        valueDisplay.style.borderRadius = '4px'; // Rounded corners
-        valueDisplay.style.transition = 'all 0.1s'; // Smooth feedback
-        valueDisplay.style.userSelect = 'none'; // Prevent text selection
-        valueDisplay.style.webkitUserSelect = 'none'; // Safari
-        valueDisplay.style.webkitTapHighlightColor = 'rgba(232, 163, 23, 0.3)'; // iOS tap highlight
-        
-        // Add visual feedback on hover/press
-        const showTapFeedback = () => {
-            valueDisplay.style.backgroundColor = 'rgba(232, 163, 23, 0.3)';
-            valueDisplay.style.transform = 'scale(1.1)';
-        };
-        
-        const hideTapFeedback = () => {
-            valueDisplay.style.backgroundColor = 'transparent';
-            valueDisplay.style.transform = 'scale(1)';
-        };
-        
-        // Mouse events
-        valueDisplay.addEventListener('mouseenter', () => {
-            valueDisplay.style.backgroundColor = 'rgba(232, 163, 23, 0.15)';
-        });
-        
-        valueDisplay.addEventListener('mouseleave', hideTapFeedback);
-        
-        valueDisplay.addEventListener('mousedown', (e) => {
-            showTapFeedback();
-        });
-        
-        valueDisplay.addEventListener('mouseup', hideTapFeedback);
-        
-        valueDisplay.addEventListener('click', (e) => {
-            e.stopPropagation();
-            e.preventDefault();
-            showNumpad();
-            setTimeout(hideTapFeedback, 100);
-        });
-        
-        // Touch events - more sensitive
-        valueDisplay.addEventListener('touchstart', (e) => {
-            e.stopPropagation();
-            e.preventDefault();
-            showTapFeedback();
-            // Trigger numpad immediately on touch
-            showNumpad();
-            setTimeout(hideTapFeedback, 150);
-        }, { passive: false });
-        
-        draw();
-        
-        return { getValue: () => value, setValue: (v) => { value = v; draw(); } };
-    }
-    
-    initKnobs() {
-        this.knobControls = {
-            beats: this.createKnob('beatsKnob', 'beatsValue', 1, 12, 4, (v) => {
-                this.knobs.beats = v;
-                this.updateBeatDisplay();
-            }),
-            bars: this.createKnob('barsKnob', 'barsValue', 1, 100, 1, (v) => {
-                this.knobs.bars = v;
-            }),
-            startBpm: this.createKnob('startBpmKnob', 'startBpmValue', 1, 400, 120, (v) => {
-                this.knobs.startBpm = v;
-                this.knobControls.endBpm.setValue(v);
-                this.knobs.endBpm = v;
-                this.endBpmManuallyChanged = false;
-                this.currentTempo = v;
-                this.updateModeIndicators();
-            }),
-            endBpm: this.createKnob('endBpmKnob', 'endBpmValue', 1, 400, 120, (v) => {
-                this.knobs.endBpm = v;
-                this.endBpmManuallyChanged = true;
-                this.updateModeIndicators();
-            }),
-            increment: this.createKnob('incrementKnob', 'incrementValue', 0, 50, 0, (v) => {
-                this.knobs.increment = v;
-                this.updateModeIndicators();
-            })
-        };
-    }
-    
-    initBeatCanvas() {
-        const canvas = document.getElementById('beatCanvas');
-        canvas.addEventListener('click', (e) => this.handleBeatClick(e));
-        canvas.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            const touch = e.touches[0];
-            const rect = canvas.getBoundingClientRect();
-            const scaleX = canvas.width / rect.width;
-            const scaleY = canvas.height / rect.height;
-            const clickEvent = {
-                offsetX: (touch.clientX - rect.left) * scaleX,
-                offsetY: (touch.clientY - rect.top) * scaleY
-            };
-            this.handleBeatClick(clickEvent);
-        }, { passive: false });
-    }
-    
-    handleBeatClick(e) {
-        const beatsPerBar = this.currentBeatsPerBar || this.knobs.beats;
-        const spacing = 400 / (beatsPerBar + 1);
-        
-        for (let i = 0; i < beatsPerBar; i++) {
-            const x = spacing * (i + 1);
-            const dx = e.offsetX - x;
-            const dy = e.offsetY - 40;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-            
-            // Increased tap radius from 12 to 25 pixels for easier tapping
-            if (distance <= 25) {
-                const beatNum = i + 1;
-                const currentState = this.beatStates.get(beatNum) || 'normal';
-                
-                // Cycle through states: normal → accent → muted → normal
-                if (currentState === 'normal') {
-                    this.beatStates.set(beatNum, 'accent');
-                } else if (currentState === 'accent') {
-                    this.beatStates.set(beatNum, 'muted');
-                } else {
-                    this.beatStates.delete(beatNum); // Remove from map = normal
-                }
-                
-                // Update display immediately
-                this.updateBeatDisplay();
-                break;
-            }
-        }
-    }
-    
-    updateBeatDisplay(activeBeat = null) {
-        const canvas = document.getElementById('beatCanvas');
-        const ctx = canvas.getContext('2d');
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        
-        const beatsPerBar = this.currentBeatsPerBar || this.knobs.beats;
-        const spacing = 400 / (beatsPerBar + 1);
-        const dotRadius = 12;
-        const y = 40;
-        
-        for (let i = 0; i < beatsPerBar; i++) {
-            const x = spacing * (i + 1);
-            const beatNum = i + 1;
-            const beatState = this.beatStates.get(beatNum) || 'normal';
-            
-            let color, outline, outlineWidth;
-            if (activeBeat !== null && i === activeBeat) {
-                // Currently playing beat - bright green
-                color = '#00FF00';
-                outline = '#00AA00';
-                outlineWidth = 3;
-            } else if (beatState === 'accent') {
-                // Accent beat - darker with gold outline
-                color = '#4C4C4C';
-                outline = '#FFD700';
-                outlineWidth = 3;
-            } else if (beatState === 'muted') {
-                // Muted beat - very dark, almost invisible
-                color = '#1C1C1C';
-                outline = '#2C2C2C';
-                outlineWidth = 2;
-            } else {
-                // Normal beat - light grey
-                color = '#3C3C3C';
-                outline = '#666666';
-                outlineWidth = 2;
-            }
-            
-            ctx.fillStyle = color;
-            ctx.strokeStyle = outline;
-            ctx.lineWidth = outlineWidth;
-            ctx.beginPath();
-            ctx.arc(x, y, dotRadius, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.stroke();
-            
-            ctx.fillStyle = '#999999';
-            ctx.font = 'bold 10px Helvetica';
-            ctx.textAlign = 'center';
-            ctx.fillText(beatNum, x, y + 30);
-        }
-    }
-    
-    updateModeIndicators() {
-        const normalLed = document.getElementById('normalLed');
-        const simpleLed = document.getElementById('simpleLed');
-        const complexLed = document.getElementById('complexLed');
-        
-        normalLed.classList.remove('active');
-        simpleLed.classList.remove('active');
-        complexLed.classList.remove('active');
-        
-        if (this.tempoSegments.length > 0) {
-            complexLed.classList.add('active');
-        } else if (this.knobs.startBpm !== this.knobs.endBpm && this.knobs.increment !== 0) {
-            simpleLed.classList.add('active');
-        } else {
-            normalLed.classList.add('active');
-        }
-    }
-    
-    initButtons() {
-        document.getElementById('startStopButton').addEventListener('click', () => this.toggleMetronome());
-        document.getElementById('saveButton').addEventListener('click', () => this.saveSegment());
-        document.getElementById('removeButton').addEventListener('click', () => this.removeLastSegment());
-        document.getElementById('clearButton').addEventListener('click', () => this.clearSegments());
-    }
-    
-    toggleMetronome() {
-        if (this.isRunning) {
-            this.stop();
-        } else {
-            this.start();
-        }
-    }
-    
-    async start() {
-        if (!this.audioContext) {
-            this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        }
-        
-        // Resume audio context for iOS (minimal fix)
-        if (this.audioContext.state === 'suspended') {
-            await this.audioContext.resume();
-        }
-        
-        const startBpm = this.knobs.startBpm;
-        const endBpm = this.knobs.endBpm;
-        const increment = this.knobs.increment;
-        
-        // Validate
-        if (this.tempoSegments.length === 0 && startBpm !== endBpm && increment === 0) {
-            alert('BPM Increment Required\n\nStart and End BPM parameters are different.\n\nEither:\n• Set a BPM increment to use tempo ramp mode, or\n• Set Start and End BPM to the same value to use normal metronome mode');
-            return;
-        }
-        
-        if (startBpm === endBpm) {
-            this.currentTempo = startBpm;
-        }
-        
-        this.isRunning = true;
-        document.getElementById('startStopButton').textContent = 'STOP';
-        document.getElementById('startStopButton').classList.add('running');
-        
-        // Set beats per bar for complex mode
-        if (this.tempoSegments.length > 0) {
-            this.currentBeatsPerBar = this.tempoSegments[0].beats;
-            this.updateBeatDisplay();
-        } else {
-            this.currentBeatsPerBar = null;
-        }
-        
-        // Calculate and display total time
-        this.totalTime = this.calculateTotalTime();
-        if (this.totalTime > 0) {
-            document.getElementById('timerDisplay').textContent = this.formatTime(this.totalTime);
-        } else {
-            document.getElementById('timerDisplay').textContent = '∞';
-        }
-        
-        this.sessionStartTime = Date.now();
-        this.runMetronome();
-    }
-    
-    stop() {
-        this.isRunning = false;
-        document.getElementById('startStopButton').textContent = 'START';
-        document.getElementById('startStopButton').classList.remove('running');
-        document.getElementById('readyDisplay').textContent = 'Ready';
-        document.getElementById('timerDisplay').textContent = '00:00';
-        this.currentBeatsPerBar = null;
-        this.updateBeatDisplay();
-        this.currentSegmentIndex = -1;
-        this.updateSegmentsDisplay();
-        
-        if (this.timerInterval) {
-            clearInterval(this.timerInterval);
-            this.timerInterval = null;
-        }
-    }
-    
-    async runMetronome() {
-        const startBpm = this.knobs.startBpm;
-        const endBpm = this.knobs.endBpm;
-        const beatsPerBar = this.knobs.beats;
-        
-        let segments, normalMode, complexMode;
-        
-        if (this.tempoSegments.length > 0) {
-            segments = this.tempoSegments;
-            normalMode = false;
-            complexMode = true;
-        } else {
-            if (startBpm === endBpm) {
-                normalMode = true;
-                complexMode = false;
-                segments = [{
-                    start: startBpm,
-                    end: startBpm,
-                    bars: 1,
-                    beats: beatsPerBar,
-                    increment: 1
-                }];
-            } else {
-                normalMode = false;
-                complexMode = false;
-                segments = [{
-                    start: startBpm,
-                    end: endBpm,
-                    bars: this.knobs.bars,
-                    beats: beatsPerBar,
-                    increment: this.knobs.increment
-                }];
-            }
-        }
-        
-        this.nextBeatTime = this.audioContext.currentTime;
-        let globalBeatCount = 0;
-        let lastBpmUpdate = 0;
-        
-        // Countdown for ramp modes
-        if (!normalMode) {
-            const countdownBpm = segments[0].start;
-            const countdownBeats = segments[0].beats;
-            const beatInterval = 60.0 / countdownBpm;
-            
-            lastBpmUpdate = 0;
-            
-            // Show GET READY
-            document.getElementById('readyDisplay').textContent = 'GET READY!';
-            await this.sleep(1000);
-            
-            this.nextBeatTime = this.audioContext.currentTime;
-            
-            // Countdown bar
-            for (let beatNum = 0; beatNum < countdownBeats; beatNum++) {
-                if (!this.isRunning) return;
-                
-                const beatInBar = beatNum + 1;
-                const countdownNumber = -(countdownBeats - beatNum);
-                
-                // Wait for beat
-                while (this.audioContext.currentTime < this.nextBeatTime) {
-                    await this.sleep(1);
-                }
-                
-                // Play sound
-                const beatState = this.beatStates.get(beatInBar) || 'normal';
-                this.playClick(beatState);
-                
-                // Update display
-                document.getElementById('readyDisplay').textContent = countdownNumber;
-                this.updateBeatDisplay(beatNum);
-                
-                this.nextBeatTime += beatInterval;
-            }
-        }
-        
-        // Start timer for ramp modes
-        if (!normalMode) {
-            this.timerInterval = setInterval(() => {
-                if (!this.isRunning) return;
-                const elapsed = (Date.now() - this.sessionStartTime) / 1000;
-                const remaining = Math.max(0, this.totalTime - elapsed);
-                document.getElementById('timerDisplay').textContent = this.formatTime(remaining);
-            }, 500);
-        }
-        
-        // Process segments
-        for (let segmentIdx = 0; segmentIdx < segments.length; segmentIdx++) {
-            if (!this.isRunning) break;
-            
-            const segment = segments[segmentIdx];
-            
-            if (complexMode) {
-                this.currentSegmentIndex = segmentIdx + 1;
-                this.updateSegmentsDisplay(this.currentSegmentIndex);
-            }
-            
-            const startBpmSeg = segment.start;
-            const endBpmSeg = segment.end;
-            const increment = segment.increment;
-            let beatsPerBarSeg = segment.beats;
-            const barsPerTempo = segment.bars;
-            
-            // Update beat display if beats changed
-            if (complexMode) {
-                if (this.currentBeatsPerBar !== beatsPerBarSeg) {
-                    this.currentBeatsPerBar = beatsPerBarSeg;
-                    this.updateBeatDisplay();
-                } else {
-                    this.currentBeatsPerBar = beatsPerBarSeg;
-                }
-            }
-            
-            // Build tempo list
-            let tempoList = [];
-            if (normalMode) {
-                tempoList = [startBpmSeg];
-            } else {
-                if (startBpmSeg === endBpmSeg) {
-                    tempoList = [startBpmSeg];
-                } else if (startBpmSeg < endBpmSeg) {
-                    let current = startBpmSeg;
-                    while (current <= endBpmSeg) {
-                        tempoList.push(current);
-                        current += increment;
-                    }
-                } else {
-                    let current = startBpmSeg;
-                    while (current >= endBpmSeg) {
-                        tempoList.push(current);
-                        current -= increment;
-                    }
-                }
-            }
-            
-            // Play through tempos
-            let tempoIndex = 0;
-            while (this.isRunning) {
-                let tempo;
-                if (normalMode) {
-                    tempo = this.currentTempo;
-                    beatsPerBarSeg = this.knobs.beats;
-                } else {
-                    if (tempoIndex >= tempoList.length) break;
-                    tempo = tempoList[tempoIndex];
-                    tempoIndex++;
-                }
-                
-                // Update display for normal mode
-                if (normalMode && tempo !== lastBpmUpdate) {
-                    lastBpmUpdate = tempo;
-                    document.getElementById('readyDisplay').textContent = `${tempo} BPM`;
-                }
-                
-                const beatInterval = 60.0 / tempo;
-                const totalBeats = normalMode ? beatsPerBarSeg : (barsPerTempo * beatsPerBarSeg);
-                
-                // Play beats
-                for (let beatNum = 0; beatNum < totalBeats; beatNum++) {
-                    if (!this.isRunning) break;
-                    
-                    if (normalMode) {
-                        tempo = this.currentTempo;
-                        beatsPerBarSeg = this.knobs.beats;
-                        if (tempo !== lastBpmUpdate) {
-                            lastBpmUpdate = tempo;
-                            document.getElementById('readyDisplay').textContent = `${tempo} BPM`;
-                        }
-                    }
-                    
-                    const beatInBar = (beatNum % beatsPerBarSeg) + 1;
-                    
-                    // Wait for beat time
-                    while (this.audioContext.currentTime < this.nextBeatTime) {
-                        await this.sleep(1);
-                    }
-                    
-                    // Play sound
-                    const beatState = this.beatStates.get(beatInBar) || 'normal';
-                    this.playClick(beatState);
-                    
-                    // Update BPM display on beat 1 for ramp modes
-                    if (!normalMode && beatInBar === 1 && tempo !== lastBpmUpdate) {
-                        lastBpmUpdate = tempo;
-                        document.getElementById('readyDisplay').textContent = `${tempo} BPM`;
-                    }
-                    
-                    // Update beat display
-                    this.updateBeatDisplay(beatInBar - 1);
-                    
-                    this.nextBeatTime += 60.0 / tempo;
-                    globalBeatCount++;
-                }
-                
-                if (normalMode) continue;
-            }
-        }
-        
-        if (complexMode) {
-            this.currentSegmentIndex = -1;
-            this.updateSegmentsDisplay();
-        }
-        
-        if (this.isRunning && !normalMode) {
-            this.stop();
-            document.getElementById('readyDisplay').textContent = 'Complete!';
-        }
-    }
-    
-    sleep(ms) {
-        return new Promise(resolve => setTimeout(resolve, ms));
-    }
-    
-    calculateTotalTime() {
-        let segments;
-        let isRampMode = false;
-        
-        if (this.tempoSegments.length > 0) {
-            segments = this.tempoSegments;
-            isRampMode = true;
-        } else {
-            const startBpm = this.knobs.startBpm;
-            const endBpm = this.knobs.endBpm;
-            
-            if (startBpm === endBpm) {
-                return 0; // Infinite
-            }
-            
-            segments = [{
-                start: startBpm,
-                end: endBpm,
-                bars: this.knobs.bars,
-                beats: this.knobs.beats,
-                increment: this.knobs.increment
-            }];
-            isRampMode = true;
-        }
-        
-        let totalSeconds = 0;
-        
-        for (const segment of segments) {
-            const startBpm = segment.start;
-            const endBpm = segment.end;
-            const increment = segment.increment;
-            const beatsPerBar = segment.beats;
-            const barsPerTempo = segment.bars;
-            const totalBeatsPerTempo = beatsPerBar * barsPerTempo;
-            
-            if (startBpm === endBpm) {
-                totalSeconds += totalBeatsPerTempo / (startBpm / 60.0);
-            } else {
-                if (startBpm < endBpm) {
-                    let currentBpm = startBpm;
-                    while (currentBpm <= endBpm) {
-                        totalSeconds += totalBeatsPerTempo / (currentBpm / 60.0);
-                        currentBpm += increment;
-                    }
-                } else {
-                    let currentBpm = startBpm;
-                    while (currentBpm >= endBpm) {
-                        totalSeconds += totalBeatsPerTempo / (currentBpm / 60.0);
-                        currentBpm -= increment;
-                    }
-                }
-            }
-        }
-        
-        // Add countdown time
-        if (isRampMode && segments.length > 0) {
-            const firstSegment = segments[0];
-            const beatsPerBar = firstSegment.beats;
-            const countdownBpm = firstSegment.start;
-            const countdownTime = beatsPerBar / (countdownBpm / 60.0);
-            totalSeconds += countdownTime + 1.0; // +1 for GET READY
-        }
-        
-        return totalSeconds;
-    }
-    
-    formatTime(seconds) {
-        const minutes = Math.floor(seconds / 60);
-        const secs = Math.floor(seconds % 60);
-        return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-    }
-    
-    saveSegment() {
-        const startBpm = this.knobs.startBpm;
-        const endBpm = this.knobs.endBpm;
-        const increment = this.knobs.increment;
-        
-        if (startBpm !== endBpm && increment === 0) {
-            alert('BPM Increment Required\n\nStart and End BPM parameters are different.\n\nEither:\n• Set a BPM increment to use tempo ramp mode, or\n• Set Start and End BPM to the same value to use normal metronome mode');
-            return;
-        }
-        
-        this.tempoSegments.push({
-            start: startBpm,
-            end: endBpm,
-            bars: this.knobs.bars,
-            beats: this.knobs.beats,
-            increment: increment
-        });
-        
-        this.updateSegmentsDisplay();
-        this.updateModeIndicators();
-    }
-    
-    removeLastSegment() {
-        if (this.tempoSegments.length > 0) {
-            this.tempoSegments.pop();
-            this.updateSegmentsDisplay();
-            this.updateModeIndicators();
-        } else {
-            alert('No segments to remove.');
-        }
-    }
-    
-    clearSegments() {
-        if (this.tempoSegments.length > 0) {
-            if (confirm('Clear all saved tempo segments?')) {
-                this.tempoSegments = [];
-                this.updateSegmentsDisplay();
-                this.updateModeIndicators();
-            }
-        }
-    }
-    
-    updateSegmentsDisplay(highlightIndex = -1) {
-        const display = document.getElementById('segmentsDisplay');
-        display.innerHTML = '';
-        
-        this.tempoSegments.forEach((seg, idx) => {
-            const div = document.createElement('div');
-            div.className = 'segment-line';
-            if (idx + 1 === highlightIndex) {
-                div.classList.add('current');
-            }
-            
-            let text;
-            if (seg.start === seg.end) {
-                text = `${idx + 1}. ${seg.start} BPM, ${seg.bars} bars, ${seg.beats} beats/bar`;
-            } else {
-                const arrow = seg.start < seg.end ? '↑' : '↓';
-                text = `${idx + 1}. ${seg.start}${arrow}${seg.end} BPM (Δ${seg.increment}), ${seg.bars} bars, ${seg.beats} beats/bar`;
-            }
-            
-            div.textContent = text;
-            display.appendChild(div);
-        });
-    }
-}
 
-// Initialize the metronome when page loads
-window.addEventListener('DOMContentLoaded', () => {
-    new DynamicMetronome();
-});
+class Knob(tk.Canvas):
+    """A rotary knob widget with clickable center for direct value entry"""
+    def __init__(self, parent, size=80, from_=0, to=100, value=50, label="", 
+                 command=None, resolution=1, **kwargs):
+        super().__init__(parent, width=size, height=size+30, 
+                        bg='#E8A317', highlightthickness=0, **kwargs)
+        
+        self.size = size
+        self.from_ = from_
+        self.to = to
+        self.value = value
+        self.label = label
+        self.command = command
+        self.resolution = resolution
+        self.radius = size // 2 - 10
+        self.center = size // 2
+        
+        # Angle range: -135° to +135° (270° total)
+        self.min_angle = -135
+        self.max_angle = 135
+        
+        self.dragging = False
+        self.last_y = 0
+        
+        self.draw_knob()
+        self.draw_label()
+        
+        # Bind mouse events
+        self.bind("<Button-1>", self.on_press)
+        self.bind("<B1-Motion>", self.on_drag)
+        self.bind("<ButtonRelease-1>", self.on_release)
+    
+    def draw_knob(self):
+        """Draw the knob"""
+        self.delete("knob")
+        
+        # Outer shadow
+        self.create_oval(5, 5, self.size-5, self.size-5, 
+                        fill='#1C1C1C', outline='#1C1C1C', tags="knob")
+        
+        # Main knob body (black)
+        self.create_oval(8, 8, self.size-8, self.size-8,
+                        fill='#2C2C2C', outline='#1C1C1C', width=2, tags="knob")
+        
+        # Inner circle (metallic look)
+        inner_size = self.size * 0.6
+        offset = (self.size - inner_size) / 2
+        gradient_center = self.create_oval(offset, offset, 
+                                          self.size-offset, self.size-offset,
+                                          fill='#8C8C8C', outline='#6C6C6C', 
+                                          width=2, tags="knob")
+        
+        # Calculate pointer angle
+        value_range = self.to - self.from_
+        normalized = (self.value - self.from_) / value_range
+        angle = self.min_angle + normalized * (self.max_angle - self.min_angle)
+        
+        # Draw pointer line
+        angle_rad = math.radians(angle)
+        start_r = self.radius * 0.3
+        end_r = self.radius * 0.85
+        
+        x1 = self.center + start_r * math.sin(angle_rad)
+        y1 = self.center - start_r * math.cos(angle_rad)
+        x2 = self.center + end_r * math.sin(angle_rad)
+        y2 = self.center - end_r * math.cos(angle_rad)
+        
+        self.create_line(x1, y1, x2, y2, fill='#FFFFFF', width=3, tags="knob")
+        
+        # Value display in center - clickable
+        self.value_text = self.create_text(self.center, self.center, 
+                        text=str(int(self.value)),
+                        font=('Helvetica', 10, 'bold'),
+                        fill='#FFFFFF', tags=("knob", "clickable"))
+    
+    def draw_label(self):
+        """Draw the label below the knob"""
+        self.create_text(self.center, self.size + 15,
+                        text=self.label,
+                        font=('Helvetica', 9, 'bold'),
+                        fill='#000000')
+    
+    def on_press(self, event):
+        """Handle mouse press"""
+        # Check if clicking on center value
+        if self.size//2 - 15 < event.x < self.size//2 + 15 and \
+           self.size//2 - 15 < event.y < self.size//2 + 15:
+            self.prompt_value_entry()
+        else:
+            self.dragging = True
+            self.last_y = event.y
+    
+    def prompt_value_entry(self):
+        """Prompt user to enter value directly"""
+        new_value = simpledialog.askinteger(
+            "Set Value",
+            f"Enter value ({self.from_}-{self.to}):",
+            initialvalue=int(self.value),
+            minvalue=self.from_,
+            maxvalue=self.to
+        )
+        if new_value is not None:
+            self.set(new_value)
+            if self.command:
+                self.command(self.value)
+    
+    def on_drag(self, event):
+        """Handle mouse drag"""
+        if self.dragging:
+            dy = self.last_y - event.y
+            value_range = self.to - self.from_
+            change = (dy / 100) * value_range * 0.5
+            
+            new_value = self.value + change
+            new_value = max(self.from_, min(self.to, new_value))
+            new_value = round(new_value / self.resolution) * self.resolution
+            
+            if new_value != self.value:
+                self.value = new_value
+                self.draw_knob()
+                if self.command:
+                    self.command(self.value)
+            
+            self.last_y = event.y
+    
+    def on_release(self, event):
+        """Handle mouse release"""
+        self.dragging = False
+    
+    def get(self):
+        """Get current value"""
+        return self.value
+    
+    def set(self, value):
+        """Set value"""
+        self.value = max(self.from_, min(self.to, value))
+        self.draw_knob()
+
+
+class TempoRampGUI:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("TempoRamp")
+        
+        # Create main canvas
+        self.main_canvas = tk.Canvas(root, width=600, height=820, 
+                                     bg='#E8A317', highlightthickness=0)
+        self.main_canvas.pack()
+        
+        self.create_pedal_background()
+        
+        # Metronome state
+        self.is_running = False
+        self.current_thread = None
+        self.accent_beats = {2, 4}
+        self.tempo_segments = []
+        
+        # Mode tracking
+        self.end_bpm_manually_set = False
+        
+        # GUI update throttling to prevent congestion
+        self.last_gui_update = 0
+        self.gui_update_pending = False
+        
+        # Initialize pygame
+        try:
+            pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=512)
+            self.audio_available = True
+            self.accent_sound = self._generate_click(frequency=1000, duration=0.05)
+            self.normal_sound = self._generate_click(frequency=800, duration=0.05)
+        except:
+            self.audio_available = False
+        
+        self.create_gui()
+    
+    def _generate_click(self, frequency=1000, duration=0.05, sample_rate=44100):
+        """Generate a click sound"""
+        num_samples = int(sample_rate * duration)
+        t = np.linspace(0, duration, num_samples, False)
+        wave = np.sin(frequency * 2 * np.pi * t)
+        envelope = np.exp(-10 * t / duration)
+        wave = wave * envelope
+        wave = (wave * 32767).astype(np.int16)
+        stereo_wave = np.column_stack((wave, wave))
+        return pygame.sndarray.make_sound(stereo_wave)
+    
+    def create_pedal_background(self):
+        """Create pedal background"""
+        for y in range(820):
+            brightness = 232 + int((y / 820) * -30)
+            color = f'#{brightness:02x}{max(brightness-69, 0):02x}17'
+            self.main_canvas.create_line(0, y, 600, y, fill=color)
+        
+        screw_positions = [(30, 30), (570, 30), (30, 790), (570, 790)]
+        for x, y in screw_positions:
+            self.draw_screw(x, y)
+    
+    def draw_screw(self, x, y):
+        """Draw a screw"""
+        self.main_canvas.create_oval(x-6, y-6, x+6, y+6, 
+                                     fill='#4C4C4C', outline='#2C2C2C', width=1)
+        self.main_canvas.create_line(x-4, y, x+4, y, fill='#1C1C1C', width=2)
+    
+    def create_gui(self):
+        # Title
+        self.main_canvas.create_text(300, 30, text="TempoRamp",
+                                     font=('Helvetica', 26, 'bold'), fill='#000000')
+        self.main_canvas.create_text(300, 55, text="PROGRESSIVE TEMPO TRAINER",
+                                     font=('Helvetica', 8, 'bold'), fill='#000000')
+        
+        # Info button
+        info_btn = tk.Button(self.main_canvas, text="ℹ", 
+                           font=('Helvetica', 12, 'bold'),
+                           bg='#CCCCCC', fg='#000000', width=2, height=1,
+                           relief=tk.RAISED, bd=2, command=self.show_instructions)
+        self.main_canvas.create_window(560, 75, window=info_btn)
+        
+        # Knobs section
+        knobs_frame = tk.Frame(self.main_canvas, bg='#E8A317')
+        self.main_canvas.create_window(300, 180, window=knobs_frame)
+        
+        # Row 1: Start BPM, End BPM, BPM Increment
+        self.start_bpm_knob = Knob(knobs_frame, label="START BPM", 
+                                   from_=20, to=300, value=60, resolution=5,
+                                   command=self.on_start_bpm_change)
+        self.start_bpm_knob.grid(row=0, column=0, padx=20, pady=10)
+        
+        self.end_bpm_knob = Knob(knobs_frame, label="END BPM",
+                                from_=20, to=300, value=60, resolution=5,
+                                command=self.on_end_bpm_change)
+        self.end_bpm_knob.grid(row=0, column=1, padx=20, pady=10)
+        
+        self.increment_knob = Knob(knobs_frame, label="BPM INCREMENT",
+                                  from_=0, to=50, value=0, resolution=1,
+                                  command=self.on_increment_change)
+        self.increment_knob.grid(row=0, column=2, padx=20, pady=10)
+        
+        # Row 2: Bars/Tempo, Beats/Bar, Tempo Segments button
+        self.bars_knob = Knob(knobs_frame, label="BARS/TEMPO",
+                             from_=1, to=50, value=12, resolution=1, size=60)
+        self.bars_knob.grid(row=1, column=0, padx=20, pady=10)
+        
+        self.beats_knob = Knob(knobs_frame, label="BEATS/BAR",
+                              from_=1, to=16, value=4, resolution=1, size=60,
+                              command=self.update_beat_count)
+        self.beats_knob.grid(row=1, column=1, padx=20, pady=10)
+        
+        segments_btn = tk.Button(knobs_frame, text="TEMPO\nSEGMENTS",
+                                font=('Helvetica', 8, 'bold'),
+                                bg='#CCCCCC', fg='#000000', width=10, height=2,
+                                relief=tk.RAISED, bd=2, command=self.show_segments_dialog)
+        segments_btn.grid(row=1, column=2, padx=20, pady=10)
+        
+        # Mode indicator - LARGER FONT
+        self.mode_label = tk.Label(self.main_canvas, text="Mode: NORMAL",
+                                  font=('Helvetica', 14, 'bold'),
+                                  bg='#E8A317', fg='#000000')
+        self.main_canvas.create_window(300, 290, window=self.mode_label)
+        
+        # Display section
+        display_frame = tk.Frame(self.main_canvas, bg='#2C2C2C', relief=tk.RAISED, bd=3)
+        self.main_canvas.create_window(300, 390, window=display_frame)
+        
+        display_inner = tk.Frame(display_frame, bg='#2C2C2C', padx=20, pady=15)
+        display_inner.pack()
+        
+        self.bpm_label = tk.Label(display_inner, text="Ready",
+                                 font=('Helvetica', 32, 'bold'),
+                                 bg='#2C2C2C', fg='#00FF00', width=12)
+        self.bpm_label.pack(pady=(0, 5))
+        
+        self.info_label = tk.Label(display_inner, text="Press START to begin",
+                                  font=('Helvetica', 11),
+                                  bg='#2C2C2C', fg='#CCCCCC')
+        self.info_label.pack(pady=(0, 10))
+        
+        self.beat_canvas = tk.Canvas(display_inner, width=400, height=80,
+                                    bg='#1C1C1C', highlightthickness=0)
+        self.beat_canvas.pack()
+        self.beat_canvas.bind("<Button-1>", self.on_canvas_click)
+        
+        accent_hint = tk.Label(display_inner, text="Click circles to set accent beats",
+                             font=('Helvetica', 8, 'italic'),
+                             bg='#2C2C2C', fg='#FFD700')
+        accent_hint.pack(pady=(5, 0))
+        
+        self.update_beat_display()
+        
+        # Control buttons - SIMPLE BUTTONS
+        control_frame = tk.Frame(self.main_canvas, bg='#E8A317')
+        self.main_canvas.create_window(300, 545, window=control_frame)
+        
+        self.start_button = tk.Button(control_frame, text="▶ START",
+                                      font=('Helvetica', 14, 'bold'),
+                                      bg='#00AA00', fg='white', width=12, height=2,
+                                      command=self.start_metronome)
+        self.start_button.grid(row=0, column=0, padx=10)
+        
+        self.stop_button = tk.Button(control_frame, text="■ STOP",
+                                     font=('Helvetica', 14, 'bold'),
+                                     bg='#CC0000', fg='white', width=12, height=2,
+                                     command=self.stop_metronome, state=tk.DISABLED)
+        self.stop_button.grid(row=0, column=1, padx=10)
+        
+        # Segment controls
+        segment_control_frame = tk.Frame(self.main_canvas, bg='#E8A317')
+        self.main_canvas.create_window(300, 625, window=segment_control_frame)
+        
+        save_seg_btn = tk.Button(segment_control_frame, text="Save Tempo Segment",
+                                font=('Helvetica', 9, 'bold'),
+                                bg='#4C9CFF', fg='#000000',
+                                command=self.save_segment_inline)
+        save_seg_btn.grid(row=0, column=0, padx=10)
+        
+        # Segment display box
+        seg_box_frame = tk.Frame(segment_control_frame, bg='#1C1C1C', relief=tk.SUNKEN, bd=2)
+        seg_box_frame.grid(row=0, column=1, padx=10)
+        
+        self.segment_display = tk.Text(seg_box_frame, height=3, width=30,
+                                       font=('Courier', 8),
+                                       bg='#1C1C1C', fg='#00FF00')
+        self.segment_display.pack(padx=2, pady=2)
+        self.update_segment_display()
+        
+        # Timer
+        timer_frame = tk.Frame(self.main_canvas, bg='#000000', relief=tk.SUNKEN, bd=4)
+        self.main_canvas.create_window(300, 715, window=timer_frame)
+        
+        self.timer_label = tk.Label(timer_frame, text="00:00",
+                                    font=('Courier', 40, 'bold'),
+                                    bg='#000000', fg='#FF0000',
+                                    padx=40, pady=12)
+        self.timer_label.pack()
+        
+        self.main_canvas.create_text(300, 780, text="TIME REMAINING",
+                                     font=('Helvetica', 9, 'bold'),
+                                     bg='#E8A317', fg='#000000')
+        
+        if not self.audio_available:
+            self.main_canvas.create_text(300, 805, text="⚠ Visual mode only",
+                                        font=('Helvetica', 9), fill='#CC0000')
+    
+    def on_start_bpm_change(self, value):
+        """Handle start BPM knob change"""
+        if not self.end_bpm_manually_set:
+            # Mirror to end BPM
+            self.end_bpm_knob.set(value)
+        else:
+            # Reset end BPM to match start BPM
+            self.end_bpm_knob.set(value)
+            self.end_bpm_manually_set = False
+        self.update_mode()
+    
+    def on_end_bpm_change(self, value):
+        """Handle end BPM knob change"""
+        self.end_bpm_manually_set = True
+        self.update_mode()
+    
+    def on_increment_change(self, value):
+        """Handle increment change"""
+        self.update_mode()
+    
+    def update_mode(self):
+        """Update mode based on knob values"""
+        start = int(self.start_bpm_knob.get())
+        end = int(self.end_bpm_knob.get())
+        
+        if start == end or not self.end_bpm_manually_set:
+            self.mode_label.config(text="Mode: NORMAL")
+        else:
+            self.mode_label.config(text="Mode: RAMP")
+    
+    def update_beat_count(self, value=None):
+        """Update when beats per bar changes"""
+        beats = int(self.beats_knob.get())
+        self.accent_beats = {b for b in self.accent_beats if b <= beats}
+        if not self.accent_beats and beats >= 2:
+            self.accent_beats = {2}
+            if beats >= 4:
+                self.accent_beats.add(4)
+        self.update_beat_display()
+    
+    def on_canvas_click(self, event):
+        """Handle clicks on beat circles"""
+        beats = int(self.beats_knob.get())
+        canvas_width = 400
+        dot_radius = 15
+        spacing = min(60, (canvas_width - 40) / beats)
+        start_x = (canvas_width - (spacing * (beats - 1))) / 2
+        y = 40
+        
+        for i in range(beats):
+            x = start_x + (i * spacing)
+            distance = math.sqrt((event.x - x)**2 + (event.y - y)**2)
+            
+            if distance <= dot_radius:
+                beat_num = i + 1
+                if beat_num in self.accent_beats:
+                    self.accent_beats.remove(beat_num)
+                else:
+                    self.accent_beats.add(beat_num)
+                self.update_beat_display()
+                break
+    
+    def update_beat_display(self, active_beat=None):
+        """Update beat visualization"""
+        self.beat_canvas.delete("all")
+        beats = int(self.beats_knob.get())
+        
+        canvas_width = 400
+        dot_radius = 15
+        spacing = min(60, (canvas_width - 40) / beats)
+        start_x = (canvas_width - (spacing * (beats - 1))) / 2
+        y = 40
+        
+        for i in range(beats):
+            x = start_x + (i * spacing)
+            beat_num = i + 1
+            is_accent = beat_num in self.accent_beats
+            
+            if active_beat is not None and i == active_beat:
+                color = '#00FF00'
+                outline = '#00AA00'
+                outline_width = 3
+            elif is_accent:
+                color = '#4C4C4C'
+                outline = '#FFD700'
+                outline_width = 3
+            else:
+                color = '#3C3C3C'
+                outline = '#666666'
+                outline_width = 2
+            
+            self.beat_canvas.create_oval(x - dot_radius, y - dot_radius,
+                                        x + dot_radius, y + dot_radius,
+                                        fill=color, outline=outline, 
+                                        width=outline_width)
+            
+            self.beat_canvas.create_text(x, y + 30, text=str(beat_num),
+                                        font=('Helvetica', 10, 'bold'),
+                                        fill='#999999')
+    
+    def save_segment_inline(self):
+        """Save current settings as a segment"""
+        start = int(self.start_bpm_knob.get())
+        end = int(self.end_bpm_knob.get())
+        increment = int(self.increment_knob.get())
+        bars = int(self.bars_knob.get())
+        beats = int(self.beats_knob.get())
+        
+        self.tempo_segments.append({
+            'start': start,
+            'end': end,
+            'increment': increment,
+            'bars': bars,
+            'beats': beats
+        })
+        
+        self.update_segment_display()
+        self.mode_label.config(text="Mode: RAMP")
+    
+    def update_segment_display(self):
+        """Update segment display box"""
+        self.segment_display.delete(1.0, tk.END)
+        if not self.tempo_segments:
+            self.segment_display.insert(tk.END, "No segments saved")
+        else:
+            for i, seg in enumerate(self.tempo_segments, 1):
+                self.segment_display.insert(tk.END, 
+                    f"{i}. {seg['start']}→{seg['end']} +{seg['increment']} {seg['bars']}bars {seg['beats']}/4\n")
+    
+    def show_segments_dialog(self):
+        """Show dialog to manage segments"""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Manage Tempo Segments")
+        dialog.geometry("400x300")
+        dialog.configure(bg='#E8A317')
+        
+        tk.Label(dialog, text="Saved Tempo Segments",
+                font=('Helvetica', 14, 'bold'),
+                bg='#E8A317').pack(pady=10)
+        
+        list_frame = tk.Frame(dialog, bg='#2C2C2C', relief=tk.SUNKEN, bd=2)
+        list_frame.pack(padx=20, pady=10, fill=tk.BOTH, expand=True)
+        
+        segments_text = tk.Text(list_frame, height=10, width=45,
+                               font=('Courier', 10),
+                               bg='#1C1C1C', fg='#00FF00')
+        segments_text.pack(padx=5, pady=5)
+        
+        if not self.tempo_segments:
+            segments_text.insert(tk.END, "No segments saved yet.\n\nUse knobs to set parameters,\nthen click 'Save Tempo Segment'.")
+        else:
+            for i, seg in enumerate(self.tempo_segments, 1):
+                segments_text.insert(tk.END,
+                    f"Segment {i}:\n")
+                segments_text.insert(tk.END,
+                    f"  {seg['start']} → {seg['end']} BPM (+{seg['increment']})\n")
+                segments_text.insert(tk.END,
+                    f"  {seg['bars']} bars, {seg['beats']}/4 time\n\n")
+        
+        btn_frame = tk.Frame(dialog, bg='#E8A317')
+        btn_frame.pack(pady=10)
+        
+        tk.Button(btn_frame, text="Clear All Segments",
+                 command=lambda: [self.clear_all_segments(), dialog.destroy()],
+                 bg='#FF6666', fg='#000000', font=('Helvetica', 10, 'bold'),
+                 width=18).pack(side=tk.LEFT, padx=5)
+        
+        tk.Button(btn_frame, text="Close",
+                 command=dialog.destroy,
+                 bg='#AAAAAA', fg='#000000', font=('Helvetica', 10, 'bold'),
+                 width=18).pack(side=tk.LEFT, padx=5)
+    
+    def clear_all_segments(self):
+        """Clear all saved segments"""
+        self.tempo_segments = []
+        self.update_segment_display()
+        self.update_mode()
+    
+    def show_instructions(self):
+        """Show instructions"""
+        instructions = """TempoRamp - Progressive Tempo Trainer
+
+NORMAL MODE:
+Start BPM = End BPM, plays continuously until stopped.
+Bars/Tempo is ignored. Accents can be changed during play.
+
+RAMP MODE:
+Start BPM ≠ End BPM, set BPM Increment, plays for set bars.
+
+SEGMENTS MODE:
+Save multiple tempo segments to play in sequence.
+
+Click knob center numbers to type values directly.
+
+ACCENT BEATS:
+Click circles to toggle accents (gold outline)."""
+        messagebox.showinfo("Instructions", instructions)
+    
+    def calculate_total_time(self):
+        """Calculate total session time"""
+        if self.tempo_segments:
+            total_seconds = 0
+            for seg in self.tempo_segments:
+                beats_per_bar = seg['beats']
+                bars = seg['bars']
+                total_beats = beats_per_bar * bars
+                
+                current_bpm = seg['start']
+                end_bpm = seg['end']
+                increment = seg['increment']
+                
+                if increment == 0:
+                    increment = 1
+                
+                while current_bpm <= end_bpm:
+                    time_at_tempo = total_beats / (current_bpm / 60.0)
+                    total_seconds += time_at_tempo
+                    current_bpm += increment
+            return total_seconds
+        else:
+            # Normal or Ramp mode
+            start = int(self.start_bpm_knob.get())
+            end = int(self.end_bpm_knob.get())
+            increment = int(self.increment_knob.get())
+            
+            if start == end:
+                return float('inf')  # Continuous
+            
+            if increment == 0:
+                return 0
+            
+            beats_per_bar = int(self.beats_knob.get())
+            bars = int(self.bars_knob.get())
+            total_beats = beats_per_bar * bars
+            
+            total_seconds = 0
+            current_bpm = start
+            while current_bpm <= end:
+                time_at_tempo = total_beats / (current_bpm / 60.0)
+                total_seconds += time_at_tempo
+                current_bpm += increment
+            
+            return total_seconds
+    
+    def format_time(self, seconds):
+        """Format seconds as MM:SS"""
+        if seconds == float('inf'):
+            return "∞"
+        minutes = int(seconds // 60)
+        secs = int(seconds % 60)
+        return f"{minutes:02d}:{secs:02d}"
+    
+    def update_timer_display(self, remaining_seconds):
+        """Update countdown timer"""
+        self.root.after(0, lambda: 
+                       self.timer_label.config(text=self.format_time(remaining_seconds)))
+    
+    def throttled_gui_update(self, update_func):
+        """Throttle GUI updates to prevent event queue congestion"""
+        current_time = time.time()
+        # Only allow GUI updates every 0.1 seconds (10 times per second max)
+        if current_time - self.last_gui_update >= 0.1 and not self.gui_update_pending:
+            self.gui_update_pending = True
+            self.last_gui_update = current_time
+            try:
+                self.root.after(0, self._execute_gui_update, update_func)
+            except:
+                self.gui_update_pending = False
+    
+    def _execute_gui_update(self, update_func):
+        """Execute GUI update and reset pending flag"""
+        try:
+            update_func()
+        finally:
+            self.gui_update_pending = False
+    
+    def start_metronome(self):
+        """Start the metronome"""
+        if self.is_running:
+            return
+        
+        start = int(self.start_bpm_knob.get())
+        end = int(self.end_bpm_knob.get())
+        increment = int(self.increment_knob.get())
+        
+        # Validation for ramp mode
+        if start != end and increment == 0 and not self.tempo_segments:
+            messagebox.showwarning("BPM Increment Required",
+                                  "Start and End BPM parameters are different.\nPlease set a BPM increment!")
+            return
+        
+        total_time = self.calculate_total_time()
+        self.total_time = total_time
+        self.session_start_time = time.perf_counter()  # Use perf_counter for precision
+        self.update_timer_display(total_time)
+        
+        self.is_running = True
+        self.start_button.config(state=tk.DISABLED)
+        self.stop_button.config(state=tk.NORMAL)
+        
+        self.root.update_idletasks()
+        
+        self.current_thread = threading.Thread(target=self.run_metronome, daemon=True)
+        self.current_thread.start()
+    
+    def stop_metronome(self):
+        """Stop the metronome"""
+        self.is_running = False
+        self.start_button.config(state=tk.NORMAL)
+        self.stop_button.config(state=tk.DISABLED)
+        self.root.update_idletasks()
+        self.root.after(100, self.reset_display)
+    
+    def reset_display(self):
+        """Reset display"""
+        self.bpm_label.config(text="Ready")
+        self.info_label.config(text="Press START to begin")
+        self.timer_label.config(text="00:00")
+        self.update_beat_display()
+    
+    def run_metronome(self):
+        """Run metronome with precise timing"""
+        start = int(self.start_bpm_knob.get())
+        end = int(self.end_bpm_knob.get())
+        
+        if self.tempo_segments:
+            # Play segments
+            for seg in self.tempo_segments:
+                if not self.is_running:
+                    break
+                self.play_tempo_segment(seg)
+        elif start == end:
+            # Normal mode - continuous
+            self.play_continuous(start)
+        else:
+            # Ramp mode
+            segment = {
+                'start': start,
+                'end': end,
+                'increment': int(self.increment_knob.get()),
+                'bars': int(self.bars_knob.get()),
+                'beats': int(self.beats_knob.get())
+            }
+            self.play_tempo_segment(segment)
+        
+        if self.is_running:
+            self.root.after(0, self.metronome_complete)
+    
+    def play_continuous(self, bpm):
+        """Play continuously at one BPM - optimized for long sessions"""
+        beats_per_bar = int(self.beats_knob.get())
+        beat_interval = 60.0 / bpm
+        
+        # Update BPM display once
+        try:
+            self.root.after_idle(lambda: self.bpm_label.config(text=f"{bpm} BPM"))
+        except:
+            pass
+        
+        beat_num = 0
+        tempo_start = time.perf_counter()  # High precision timer
+        
+        while self.is_running:
+            # Calculate exact target time for THIS beat
+            target_time = tempo_start + (beat_num * beat_interval)
+            
+            beat_in_bar = (beat_num % beats_per_bar)
+            bar_num = beat_num // beats_per_bar + 1
+            
+            # CRITICAL: Play audio IMMEDIATELY - never wait for GUI
+            if self.audio_available:
+                if (beat_in_bar + 1) in self.accent_beats:
+                    self.accent_sound.play()
+                else:
+                    self.normal_sound.play()
+            
+            # Update beat circles - synced with audio but non-blocking
+            try:
+                self.root.after_idle(lambda beat=beat_in_bar:
+                                    self.update_beat_display(beat))
+            except:
+                pass
+            
+            # Update bar counter occasionally (every 2 bars) to reduce load
+            if beat_num % (beats_per_bar * 2) == 0:
+                try:
+                    self.root.after_idle(lambda b=bar_num:
+                                        self.info_label.config(text=f"Bar {b}"))
+                except:
+                    pass
+            
+            # Sleep until exact target time for NEXT beat
+            beat_num += 1
+            next_target = tempo_start + (beat_num * beat_interval)
+            current_time = time.perf_counter()
+            sleep_time = next_target - current_time
+            
+            if sleep_time > 0.001:  # Only sleep if >1ms needed
+                time.sleep(sleep_time)
+            # If we're behind, continue immediately
+    
+    def play_tempo_segment(self, segment):
+        """Play a tempo segment - optimized for long sessions"""
+        current_bpm = segment['start']
+        end_bpm = segment['end']
+        increment = segment['increment']
+        bars_per_tempo = segment['bars']
+        beats_per_bar = segment['beats']
+        
+        if increment == 0:
+            increment = 1
+        
+        while current_bpm <= end_bpm and self.is_running:
+            # Update BPM display once per tempo
+            try:
+                self.root.after_idle(lambda bpm=current_bpm:
+                                    self.bpm_label.config(text=f"{bpm} BPM"))
+            except:
+                pass
+            
+            beat_interval = 60.0 / current_bpm
+            total_beats = bars_per_tempo * beats_per_bar
+            
+            tempo_start_time = time.perf_counter()  # High precision
+            
+            for beat_num in range(total_beats):
+                if not self.is_running:
+                    break
+                
+                # Calculate exact target time for THIS beat
+                target_time = tempo_start_time + (beat_num * beat_interval)
+                
+                bar_num = beat_num // beats_per_bar + 1
+                beat_in_bar = beat_num % beats_per_bar
+                
+                # CRITICAL: Play audio IMMEDIATELY - never wait for GUI
+                if self.audio_available:
+                    if (beat_in_bar + 1) in self.accent_beats:
+                        self.accent_sound.play()
+                    else:
+                        self.normal_sound.play()
+                
+                # Update beat circles - synced with audio but non-blocking
+                try:
+                    self.root.after_idle(lambda beat=beat_in_bar:
+                                        self.update_beat_display(beat))
+                except:
+                    pass
+                
+                # Update bar info only on first beat of bar
+                if beat_num % beats_per_bar == 0:
+                    try:
+                        self.root.after_idle(lambda b=bar_num:
+                                            self.info_label.config(text=f"Bar {b}/{bars_per_tempo}"))
+                    except:
+                        pass
+                
+                # Update timer occasionally (every 8 beats)
+                if beat_num % 8 == 0 and hasattr(self, 'session_start_time'):
+                    try:
+                        elapsed = time.perf_counter() - self.session_start_time
+                        if self.total_time != float('inf'):
+                            remaining = max(0, self.total_time - elapsed)
+                            self.root.after_idle(lambda r=remaining: 
+                                               self.timer_label.config(text=self.format_time(r)))
+                    except:
+                        pass
+                
+                # Sleep until exact target time for NEXT beat
+                next_beat_num = beat_num + 1
+                next_target = tempo_start_time + (next_beat_num * beat_interval)
+                current_time = time.perf_counter()
+                sleep_time = next_target - current_time
+                
+                if sleep_time > 0.001:  # Only sleep if >1ms needed
+                    time.sleep(sleep_time)
+                # If behind, continue immediately
+            
+            current_bpm += increment
+    
+    def metronome_complete(self):
+        """Called when complete"""
+        self.is_running = False
+        self.start_button.config(state=tk.NORMAL)
+        self.stop_button.config(state=tk.DISABLED)
+        self.bpm_label.config(text="Complete!")
+        self.info_label.config(text="Session finished")
+        self.timer_label.config(text="00:00")
+        self.update_beat_display()
+
+
+def main():
+    root = tk.Tk()
+    app = TempoRampGUI(root)
+    root.mainloop()
+
+
+if __name__ == "__main__":
+    main()
